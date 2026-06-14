@@ -7,20 +7,26 @@
  * every visible text element, reads the COMPUTED foreground colour and the
  * COMPOSITED background behind it, then checks the WCAG 2.1 AA ratio.
  *
+ * Background resolution handles:
+ *   - solid background-color layers (composited up the ancestor chain, with alpha)
+ *   - CSS gradients: the colour stops are averaged into a representative colour, so
+ *     a dark gradient section is not mistaken for white. This is an approximation,
+ *     adequate for the near-uniform brand gradients used here.
+ *   - raster background-image: url(...): unknowable, so the element is reported as
+ *     REVIEW (not a hard fail) rather than guessed.
+ *
  * Usage:
  *   1) serve the site:   python3 -m http.server 8123
  *   2) install once:     (cd tools && npm i playwright-core)   # uses installed Chrome
- *   3) run:              node tools/contrast-audit.mjs [baseUrl]
+ *   3) run:              node tools/contrast-audit.mjs [baseUrl] [/path ...]
+ *      With no /paths it auto-discovers the root-level .html files of the project it
+ *      is run from (archive/ is a subdir, so it is excluded).
  *
- * Reusable across projects: copy this file + run the three steps. Exit code is 1 if
- * any AA failure is found, so it can gate CI.
+ * Exit code is 1 if any real AA failure is found, so it can gate CI.
  */
 import { chromium } from 'playwright-core';
 import { readdirSync } from 'node:fs';
 
-// Portable: pass a base URL and/or explicit /paths as args; otherwise auto-discover
-// the root-level .html files of the project this is run from (archive/ is a subdir,
-// so it is excluded).  e.g.  node tools/contrast-audit.mjs http://localhost:8123
 const args = process.argv.slice(2);
 const BASE = args.find((a) => a.startsWith('http')) || 'http://localhost:8123';
 let PATHS = args.filter((a) => a.startsWith('/'));
@@ -45,24 +51,37 @@ const audit = () => {
     b: top.b * top.a + bot.b * (1 - top.a),
     a: 1,
   });
+  // Average the colour stops of any gradient(s) in a background-image string.
+  const gradient = (bgImage) => {
+    if (!bgImage || bgImage === 'none') return { present: false, raster: false };
+    const raster = /url\(/.test(bgImage);
+    const cols = [...bgImage.matchAll(/rgba?\(([^)]+)\)/g)].map((m) => {
+      const p = m[1].split(',').map((x) => parseFloat(x.trim()));
+      return { r: p[0], g: p[1], b: p[2], a: p[3] === undefined ? 1 : p[3] };
+    });
+    if (!cols.length) return { present: false, raster };
+    const n = cols.length, avg = { r: 0, g: 0, b: 0, a: 0 };
+    for (const c of cols) { avg.r += c.r; avg.g += c.g; avg.b += c.b; avg.a += c.a; }
+    return { present: true, raster, color: { r: avg.r / n, g: avg.g / n, b: avg.b / n, a: avg.a / n } };
+  };
   const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
   const lum = (c) => 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
   const ratio = (a, b) => { const la = lum(a), lb = lum(b), hi = Math.max(la, lb), lo = Math.min(la, lb); return (hi + 0.05) / (lo + 0.05); };
 
   const effBg = (el) => {
-    const stack = [];
-    let node = el, hasImage = false;
-    while (node) {
-      const cs = getComputedStyle(node);
-      const bg = parse(cs.backgroundColor);
-      const img = cs.backgroundImage && cs.backgroundImage !== 'none';
-      if (img) hasImage = true;
-      if (bg.a > 0) stack.push(bg);
-      node = node.parentElement;
-    }
+    const chain = [];
+    for (let n = el; n; n = n.parentElement) chain.push(n);
     let base = { r: 255, g: 255, b: 255, a: 1 }; // canvas default
-    for (let i = stack.length - 1; i >= 0; i--) base = over(stack[i], base);
-    return { color: base, hasImage };
+    let raster = false;
+    for (let i = chain.length - 1; i >= 0; i--) { // html -> el, paint order
+      const cs = getComputedStyle(chain[i]);
+      const bc = parse(cs.backgroundColor);
+      if (bc.a > 0) base = over(bc, base);
+      const g = gradient(cs.backgroundImage);
+      if (g.present) base = over(g.color, base);
+      if (g.raster) raster = true; // raster image we cannot read
+    }
+    return { color: base, raster };
   };
 
   const selFor = (el) => {
@@ -79,9 +98,7 @@ const audit = () => {
   };
 
   const results = [];
-  const all = document.body.querySelectorAll('*');
-  for (const el of all) {
-    // only elements with their OWN visible text
+  for (const el of document.body.querySelectorAll('*')) {
     const ownText = Array.from(el.childNodes)
       .filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').replace(/\s+/g, ' ').trim();
     if (!ownText) continue;
@@ -106,8 +123,8 @@ const audit = () => {
       fg: `rgb(${Math.round(fg.r)},${Math.round(fg.g)},${Math.round(fg.b)})`,
       bg: `rgb(${Math.round(bg.color.r)},${Math.round(bg.color.g)},${Math.round(bg.color.b)})`,
       ratio: Math.round(r * 100) / 100,
-      required, big, hasImage: bg.hasImage,
-      pass: r >= required,
+      required, raster: bg.raster,
+      status: r >= required ? 'pass' : (bg.raster ? 'review' : 'fail'),
     });
   }
   return results;
@@ -117,28 +134,29 @@ const audit = () => {
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 1200 } });
 
-let totalFail = 0, totalChecked = 0, reviewImg = 0;
+let totalFail = 0, totalReview = 0, totalChecked = 0;
 for (const path of PATHS) {
   await page.goto(BASE + path, { waitUntil: 'networkidle' });
   const res = await page.evaluate(audit);
   totalChecked += res.length;
-  const fails = res.filter((r) => !r.pass);
-  const imgFails = fails.filter((r) => r.hasImage);
-  reviewImg += imgFails.length;
-  console.log(`\n=== ${path}  (${res.length} text elements, ${fails.length} fail) ===`);
-  if (fails.length === 0) { console.log('  PASS: all text meets AA'); }
+  const fails = res.filter((r) => r.status === 'fail');
+  const reviews = res.filter((r) => r.status === 'review');
+  totalReview += reviews.length;
+  console.log(`\n=== ${path}  (${res.length} text elements, ${fails.length} fail, ${reviews.length} review) ===`);
+  if (!fails.length && !reviews.length) console.log('  PASS: all text meets AA');
   for (const f of fails) {
     totalFail++;
-    const note = f.hasImage ? ' [over image/gradient - review]' : '';
-    console.log(`  FAIL ${f.ratio}:1 (need ${f.required}) ${f.fg} on ${f.bg}${note}`);
+    console.log(`  FAIL ${f.ratio}:1 (need ${f.required}) ${f.fg} on ${f.bg}`);
     console.log(`       ${f.sel}`);
     console.log(`       "${f.text}"`);
   }
+  for (const r of reviews) {
+    console.log(`  REVIEW (text over a raster image) ${r.fg}  ${r.sel}  "${r.text}"`);
+  }
 }
-// also check both nav states by toggling the mobile menu? Desktop covers links.
 console.log(`\n----------------------------------------`);
 console.log(`Checked ${totalChecked} text elements across ${PATHS.length} pages.`);
 console.log(totalFail === 0 ? 'RESULT: PASS (no AA contrast failures)' : `RESULT: ${totalFail} AA FAILURE(S)`);
-if (reviewImg) console.log(`(${reviewImg} of the failures sit over an image/gradient and may warrant a manual look.)`);
+if (totalReview) console.log(`(${totalReview} element(s) sit over a raster image and need a manual look.)`);
 await browser.close();
 process.exit(totalFail === 0 ? 0 : 1);
