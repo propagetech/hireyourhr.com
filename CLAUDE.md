@@ -118,13 +118,18 @@ For red-coloured text, links or icons on a light background use `--red-deep`; on
 
 ## SEO conventions
 
-- **URL convention: directory ("pretty") URLs.** Each page is a folder with
-  `index.html`, served at a trailing-slash path (`about/index.html` at `/about/`).
-  Home is `index.html` at the root, served at `/` (do not create a `home/` folder);
-  `404.html` stays at the root. Two invariants make this work: assets are root-absolute
-  (`/css/...`, `/js/...`, `/fonts/...`, `/imgs/...`, `/site.webmanifest`), and internal
-  links and canonicals use the `/slug/` form (never `/slug.html`). `/slug` 301-redirects
-  to `/slug/`, so always link with the trailing slash. New page = `slug/index.html`.
+- **URL convention: directory ("pretty") URLs, path-portable.** Each page is a folder
+  with `index.html`, served at a trailing-slash path (`about/index.html` at `/about/`).
+  Home is `index.html` at the root, served at `/` (no `home/` folder); `404.html` stays
+  at the root. Assets and internal links are **relative and depth-aware** so the site
+  works both at a domain root and under a GitHub Pages project subpath
+  (`https://propagetech.github.io/hireyourhr.com/`): home uses `css/...`, `about/`;
+  inner pages use `../css/...`, `../services/`, home link `../`. Never use root-absolute
+  `/css/...` or `/about/` (they 404 on a project subpath). Exception: `404.html` stays
+  root-absolute (GitHub serves it at arbitrary depths; correct for the production root).
+  Canonical, `og:url`, sitemap `loc` and JSON-LD `@id` stay absolute on the production
+  domain. Link with the trailing slash (`/slug` 301-redirects to `/slug/`). New page =
+  `slug/index.html` with `../` asset and link prefixes.
 - Every page has a unique `<title>`, meta description, `<link rel="canonical">`, and
   Open Graph + Twitter tags. Keep these unique per page when adding content.
 - JSON-LD per page type: Home has `ProfessionalService` + `WebSite`; inner pages have

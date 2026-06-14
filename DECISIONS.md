@@ -3,6 +3,22 @@
 A short record of the choices made when rebuilding the Hire Your HR site, so future work
 has the reasoning, not just the result. Newest first.
 
+## 2026-06-14: Made URLs path-portable (relative) for the github.io preview
+
+The preview deploy is a GitHub Pages project page at
+`https://propagetech.github.io/hireyourhr.com/` (served under the `/hireyourhr.com/`
+subpath, not a domain root). The directory-URL step had used root-absolute asset paths
+(`/css/...`), which resolve to the github.io root on a project page and 404, so the
+preview would render unstyled. Converted assets and internal links to depth-aware
+**relative** paths (home `css/...`, `about/`; inner pages `../css/...`, `../services/`,
+home link `../`), which work at both a domain root and a project subpath. Also fixed two
+footer links the migration had left relative-but-broken from sub-folders: the Sitemap
+link (`sitemap.xml` to `../sitemap.xml`) and the Home link (`index.html` to `../`).
+`404.html` stays root-absolute; canonical/OG/sitemap/JSON-LD stay absolute on the
+production domain. Verified with a headless-Chrome subpath simulation (0 failed requests,
+CSS loaded, nav navigates correctly) and the production-root contrast audit still passes
+(381 text elements). CLAUDE.md SEO conventions updated accordingly.
+
 ## 2026-06-14: Switched to directory ("pretty") URLs
 
 Each page became a folder with `index.html`, served at a trailing-slash path
