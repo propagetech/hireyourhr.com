@@ -3,6 +3,18 @@
 A short record of the choices made when rebuilding the Hire Your HR site, so future work
 has the reasoning, not just the result. Newest first.
 
+## 2026-06-14: Switched to directory ("pretty") URLs
+
+Each page became a folder with `index.html`, served at a trailing-slash path
+(`about.html` is now `about/index.html` at `/about/`). Home stays at `/` and `404.html`
+stays at the root. Done pre-launch, when the change is cheap. The migration rewrote
+every asset path to root-absolute (`/css/...`, `/imgs/...`), moved every internal link
+and canonical to the `/slug/` form, and updated `sitemap.xml`. Verified: directory URLs
+serve 200, `/slug` 301-redirects to `/slug/`, the link/anchor check passes, JSON-LD
+parses, and the contrast audit still passes (381 text elements). The rule is documented
+in CLAUDE.md (SEO conventions). Note: if old `/slug.html` URLs were already indexed,
+add redirects, since they 404 after the move.
+
 ## 2026-06-14: Verified AA contrast and guarded the eyebrow cascade
 
 Added a DOM-aware contrast audit (`tools/contrast-audit.mjs`) that loads every page in

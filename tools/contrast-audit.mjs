@@ -25,17 +25,24 @@
  * Exit code is 1 if any real AA failure is found, so it can gate CI.
  */
 import { chromium } from 'playwright-core';
-import { readdirSync } from 'node:fs';
+import { readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 const args = process.argv.slice(2);
 const BASE = args.find((a) => a.startsWith('http')) || 'http://localhost:8123';
 let PATHS = args.filter((a) => a.startsWith('/'));
 if (!PATHS.length) {
-  PATHS = readdirSync(process.cwd())
-    .filter((f) => f.endsWith('.html'))
-    .map((f) => (f === 'index.html' ? '/' : '/' + f))
-    .sort((a, b) => (a === '/' ? -1 : b === '/' ? 1 : a.localeCompare(b)));
+  // Auto-discover pages: root *.html (flat sites) plus dir/index.html (directory
+  // "pretty" URLs). Works for both layouts; archive/ and asset dirs are skipped.
+  const cwd = process.cwd();
+  const skip = new Set(['archive', 'tools', 'fonts', 'css', 'js', 'imgs', 'docs', 'node_modules', '.git', '.github']);
+  const rootHtml = readdirSync(cwd).filter((f) => f.endsWith('.html')).map((f) => (f === 'index.html' ? '/' : '/' + f));
+  const dirPages = readdirSync(cwd, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !skip.has(d.name) && existsSync(join(cwd, d.name, 'index.html')))
+    .map((d) => '/' + d.name + '/');
+  PATHS = [...new Set([...rootHtml, ...dirPages])];
 }
+PATHS.sort((a, b) => (a === '/' ? -1 : b === '/' ? 1 : a.localeCompare(b)));
 
 const audit = () => {
   // ---- runs inside the page ----

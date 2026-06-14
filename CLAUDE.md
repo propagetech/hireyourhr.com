@@ -24,14 +24,14 @@ before editing.
 ## File layout
 
 ```
-/                     site root (GitHub Pages serves from here)
-  index.html          Home (ProfessionalService + WebSite JSON-LD)
-  about.html          About: story, vision, values (BreadcrumbList)
-  services.html       Services, 4 pillars with #strategy #policies #compliance #operations (Service ItemList)
-  why-us.html         Why us / how we work: partnership, team, steps (BreadcrumbList)
-  faq.html            FAQ accordion (FAQPage JSON-LD)
-  contact.html        Email-led contact + mailto helper (BreadcrumbList)
-  404.html            Styled, noindex, uses absolute (/...) asset paths
+/                       site root (GitHub Pages serves from here)
+  index.html            Home (ProfessionalService + WebSite JSON-LD), served at /
+  about/index.html      About: story, vision, values (BreadcrumbList), at /about/
+  services/index.html   Services, 4 pillars #strategy #policies #compliance #operations (Service ItemList), at /services/
+  why-us/index.html     Why us / how we work: partnership, team, steps (BreadcrumbList), at /why-us/
+  faq/index.html        FAQ accordion (FAQPage JSON-LD), at /faq/
+  contact/index.html    Email-led contact + mailto helper (BreadcrumbList), at /contact/
+  404.html              Styled, noindex, stays at root, uses absolute (/...) asset paths
   css/styles.css      The single design-system stylesheet
   js/main.js          Progressive enhancement only (nav, accordion, mailto helper)
   fonts/              Self-hosted woff2 (Inter + Source Serif 4, latin subset)
@@ -118,6 +118,13 @@ For red-coloured text, links or icons on a light background use `--red-deep`; on
 
 ## SEO conventions
 
+- **URL convention: directory ("pretty") URLs.** Each page is a folder with
+  `index.html`, served at a trailing-slash path (`about/index.html` at `/about/`).
+  Home is `index.html` at the root, served at `/` (do not create a `home/` folder);
+  `404.html` stays at the root. Two invariants make this work: assets are root-absolute
+  (`/css/...`, `/js/...`, `/fonts/...`, `/imgs/...`, `/site.webmanifest`), and internal
+  links and canonicals use the `/slug/` form (never `/slug.html`). `/slug` 301-redirects
+  to `/slug/`, so always link with the trailing slash. New page = `slug/index.html`.
 - Every page has a unique `<title>`, meta description, `<link rel="canonical">`, and
   Open Graph + Twitter tags. Keep these unique per page when adding content.
 - JSON-LD per page type: Home has `ProfessionalService` + `WebSite`; inner pages have
