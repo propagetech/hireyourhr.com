@@ -3,6 +3,24 @@
 A short record of the choices made when rebuilding the Hire Your HR site, so future work
 has the reasoning, not just the result. Newest first.
 
+## 2026-06-14: Verified AA contrast and guarded the eyebrow cascade
+
+Added a DOM-aware contrast audit (`tools/contrast-audit.mjs`) that loads every page in
+real Chrome and checks the computed foreground against the composited background of
+every text element (it resolves gradient sections by averaging their colour stops, so a
+dark gradient is not mistaken for white). Result: all pages pass WCAG 2.1 AA, 0 failures
+across 381 text elements. A token/palette table cannot see the cascade, so this browser
+audit is the authoritative check: run it after any colour or markup change
+(`python3 -m http.server 8123`, then `node tools/contrast-audit.mjs`).
+
+Rule adopted, **colour belongs to the component, not the container**: a container
+selector like `.section-head p` (specificity 0-1-1) silently out-specifies the
+single-class `.eyebrow` (0-1-0) nested inside it, repainting the eyebrow with `--muted`
+instead of the brand red. It did not fail contrast here, but it was off-brand and is the
+exact root cause that produced a real 1.39:1 failure on a sister site. Fixed by scoping
+the rule to `.section-head p:not(.eyebrow)` so eyebrows render their accent colour
+everywhere. Never let a container rule override a component colour class.
+
 ## 2026-06-14: Full rebuild
 
 **Archived the old site.** The previous single-page Viamagus/ProPage brochure export

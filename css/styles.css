@@ -207,12 +207,14 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-6) 0; }
 
 .section-head { max-width: 60ch; margin-bottom: var(--sp-7); }
 .section-head.center { margin-inline: auto; text-align: center; }
-.section-head p {
+/* :not(.eyebrow) so this container rule never overrides the .eyebrow component
+   colour (a descendant `p` selector out-specifies the single-class .eyebrow). */
+.section-head p:not(.eyebrow) {
   font-size: var(--fs-lead);
   color: var(--muted);
   margin-top: var(--sp-2);
 }
-.section--dark .section-head p { color: var(--on-dark-muted); }
+.section--dark .section-head p:not(.eyebrow) { color: var(--on-dark-muted); }
 
 .lead { font-size: var(--fs-lead); color: var(--muted); }
 .section--dark .lead { color: var(--on-dark-muted); }
